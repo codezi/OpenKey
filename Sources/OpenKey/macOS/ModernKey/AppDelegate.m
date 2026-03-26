@@ -31,7 +31,7 @@ int vCodeTable = 0;
 int vCheckSpelling = 1;
 int vUseModernOrthography = 1;
 int vQuickTelex = 0;
-#define DEFAULT_SWITCH_STATUS 0x7A000206 //default option + z
+#define DEFAULT_SWITCH_STATUS 0xFE000CFE //default shift + command
 int vSwitchKeyStatus = DEFAULT_SWITCH_STATUS;
 int vRestoreIfWrongSpelling = 0;
 int vFixRecommendBrowser = 1;
@@ -194,6 +194,13 @@ extern bool convertToolDontAlertWhenCompleted;
         [self loadDefaultConfig];
     }
     [[NSUserDefaults standardUserDefaults] setInteger:1 forKey:@"NonFirstTime"];
+    
+    // One-time migration: switch key from Option+Z to Shift+Command
+    if (![[NSUserDefaults standardUserDefaults] boolForKey:@"MigratedSwitchKeyV2"]) {
+        vSwitchKeyStatus = DEFAULT_SWITCH_STATUS;
+        [[NSUserDefaults standardUserDefaults] setInteger:vSwitchKeyStatus forKey:@"SwitchKeyStatus"];
+        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"MigratedSwitchKeyV2"];
+    }
     
     //correct run on startup
     NSInteger val = [[NSUserDefaults standardUserDefaults] integerForKey:@"RunOnStartup"];
