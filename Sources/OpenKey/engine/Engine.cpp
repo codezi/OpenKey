@@ -1140,8 +1140,8 @@ void handleMainKey(const Uint16& data, const bool& isCaps) {
     
     //if is mark key
     if (IS_MARK_KEY(data)) {
-        for (i = 0; i < _vowelForMark.size(); i++) {
-            vector<vector<Uint16>>& charset = _vowelForMark[i];
+        for (auto& vowelEntry : _vowelForMark) {
+            vector<vector<Uint16>>& charset = vowelEntry.second;
             isCorect = false;
             isChanged = false;
             k = _index;
