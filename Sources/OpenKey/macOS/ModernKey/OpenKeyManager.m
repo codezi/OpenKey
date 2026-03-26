@@ -9,6 +9,7 @@
 #import "OpenKeyManager.h"
 
 extern void OpenKeyInit(void);
+extern void OpenKeyCleanup(void);
 
 extern CGEventRef OpenKeyCallback(CGEventTapProxy proxy,
                                   CGEventType type,
@@ -82,9 +83,9 @@ static CFRunLoopSourceRef runLoopSource;
 
 +(BOOL)stopEventTap {
     if (_isInited) { //release all object
-        CFRunLoopStop(CFRunLoopGetCurrent());
+        CGEventTapEnable(eventTap, false);
         
-        CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, kCFRunLoopDefaultMode);
+        CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, kCFRunLoopCommonModes);
         CFRelease(runLoopSource);
         runLoopSource = nil;
         
@@ -92,9 +93,18 @@ static CFRunLoopSourceRef runLoopSource;
         CFRelease(eventTap);
         eventTap = nil;
         
+        OpenKeyCleanup();
         _isInited = false;
+        
+        CFRunLoopStop(CFRunLoopGetCurrent());
     }
     return YES;
+}
+
++(void)reEnableEventTap {
+    if (_isInited && eventTap) {
+        CGEventTapEnable(eventTap, true);
+    }
 }
 
 +(NSArray*)getTableCodes {
@@ -233,11 +243,14 @@ static CFRunLoopSourceRef runLoopSource;
         }
     }
     
-    NSWorkspace *workspace = [NSWorkspace sharedWorkspace];
-    NSURL *url = [NSURL fileURLWithPath:[workspace fullPathForApplication:target]];
-    NSError *error = nil;
-    NSArray *arguments = [NSArray arrayWithObjects: @"yeah", nil];
-    [workspace launchApplicationAtURL:url options:0 configuration:[NSDictionary dictionaryWithObject:arguments forKey:NSWorkspaceLaunchConfigurationArguments] error:&error];
+    NSURL *url = [NSURL fileURLWithPath:target];
+    NSWorkspaceOpenConfiguration *config = [NSWorkspaceOpenConfiguration configuration];
+    config.arguments = @[@"yeah"];
+    [[NSWorkspace sharedWorkspace] openApplicationAtURL:url configuration:config completionHandler:^(NSRunningApplication *app, NSError *error) {
+        if (error) {
+            NSLog(@"Error launching update helper: %@", error);
+        }
+    }];
     
     [NSApp terminate:0]; //exit main app
 }

@@ -10,6 +10,7 @@
 #import <Carbon/Carbon.h>
 #import <Cocoa/Cocoa.h>
 #import <ServiceManagement/ServiceManagement.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import "AppDelegate.h"
 #import "ViewController.h"
 #import "OpenKeyManager.h"
@@ -119,8 +120,14 @@ extern bool convertToolDontAlertWhenCompleted;
                                               forKey: @"NSInitialToolTipDelay"];
     
     //check whether this app has been launched before that or not
-    NSArray* runningApp = [[NSWorkspace sharedWorkspace] runningApplications];
-    if ([runningApp containsObject:OPENKEY_BUNDLE]) { //if already running -> exit
+    NSArray<NSRunningApplication *>* runningApps = [[NSWorkspace sharedWorkspace] runningApplications];
+    NSInteger instanceCount = 0;
+    for (NSRunningApplication *app in runningApps) {
+        if ([app.bundleIdentifier isEqualToString:OPENKEY_BUNDLE]) {
+            instanceCount++;
+        }
+    }
+    if (instanceCount > 1) { //if already running -> exit
         [NSApp terminate:nil];
         return;
     }
@@ -175,7 +182,8 @@ extern bool convertToolDontAlertWhenCompleted;
 }
 
 - (void)applicationWillTerminate:(NSNotification *)aNotification {
-    // Insert code here to tear down your application
+    [[[NSWorkspace sharedWorkspace] notificationCenter] removeObserver:self];
+    [OpenKeyManager stopEventTap];
 }
 
 -(void) createStatusBarMenu {
@@ -271,14 +279,14 @@ extern bool convertToolDontAlertWhenCompleted;
     vFreeMark = 0; [[NSUserDefaults standardUserDefaults] setInteger:vFreeMark forKey:@"FreeMark"];
     vCheckSpelling = 1; [[NSUserDefaults standardUserDefaults] setInteger:vCheckSpelling forKey:@"Spelling"];
     vCodeTable = 0; [[NSUserDefaults standardUserDefaults] setInteger:vCodeTable forKey:@"CodeTable"];
-    vSwitchKeyStatus = DEFAULT_SWITCH_STATUS; [[NSUserDefaults standardUserDefaults] setInteger:vCodeTable forKey:@"SwitchKeyStatus"];
+    vSwitchKeyStatus = DEFAULT_SWITCH_STATUS; [[NSUserDefaults standardUserDefaults] setInteger:vSwitchKeyStatus forKey:@"SwitchKeyStatus"];
     vQuickTelex = 0; [[NSUserDefaults standardUserDefaults] setInteger:vQuickTelex forKey:@"QuickTelex"];
     vUseModernOrthography = 0; [[NSUserDefaults standardUserDefaults] setInteger:vUseModernOrthography forKey:@"ModernOrthography"];
     vRestoreIfWrongSpelling = 0; [[NSUserDefaults standardUserDefaults] setInteger:vRestoreIfWrongSpelling forKey:@"RestoreIfInvalidWord"];
     vFixRecommendBrowser = 1; [[NSUserDefaults standardUserDefaults] setInteger:vFixRecommendBrowser forKey:@"FixRecommendBrowser"];
     vUseMacro = 1; [[NSUserDefaults standardUserDefaults] setInteger:vUseMacro forKey:@"UseMacro"];
     vUseMacroInEnglishMode = 0; [[NSUserDefaults standardUserDefaults] setInteger:vUseMacroInEnglishMode forKey:@"UseMacroInEnglishMode"];
-    vSendKeyStepByStep = 0;[[NSUserDefaults standardUserDefaults] setInteger:vUseMacroInEnglishMode forKey:@"SendKeyStepByStep"];
+    vSendKeyStepByStep = 0;[[NSUserDefaults standardUserDefaults] setInteger:vSendKeyStepByStep forKey:@"SendKeyStepByStep"];
     vUseSmartSwitchKey = 1;[[NSUserDefaults standardUserDefaults] setInteger:vUseSmartSwitchKey forKey:@"UseSmartSwitchKey"];
     vUpperCaseFirstChar = 0;[[NSUserDefaults standardUserDefaults] setInteger:vUpperCaseFirstChar forKey:@"UpperCaseFirstChar"];
     vTempOffSpelling = 0;[[NSUserDefaults standardUserDefaults] setInteger:vTempOffSpelling forKey:@"vTempOffSpelling"];
@@ -300,8 +308,21 @@ extern bool convertToolDontAlertWhenCompleted;
 }
 
 -(void)setRunOnStartup:(BOOL)val {
-    CFStringRef appId = (__bridge CFStringRef)@"com.tuyenmai.OpenKeyHelper";
-    SMLoginItemSetEnabled(appId, val);
+    if (@available(macOS 13.0, *)) {
+        SMAppService *service = [SMAppService loginItemServiceWithIdentifier:@"com.tuyenmai.OpenKeyHelper"];
+        NSError *error = nil;
+        if (val) {
+            [service registerAndReturnError:&error];
+        } else {
+            [service unregisterAndReturnError:&error];
+        }
+        if (error) {
+            NSLog(@"SMAppService error: %@", error);
+        }
+    } else {
+        CFStringRef appId = (__bridge CFStringRef)@"com.tuyenmai.OpenKeyHelper";
+        SMLoginItemSetEnabled(appId, val);
+    }
 }
 
 -(void)setGrayIcon:(BOOL)val {
@@ -404,7 +425,7 @@ extern bool convertToolDontAlertWhenCompleted;
 
 }
 
--(void)onImputMethodChanged:(BOOL)willNotify {
+-(void)onInputMethodChanged:(BOOL)willNotify {
     NSInteger intInputMethod = [[NSUserDefaults standardUserDefaults] integerForKey:@"InputMethod"];
     if (intInputMethod == 0)
         intInputMethod = 1;
@@ -422,7 +443,7 @@ extern bool convertToolDontAlertWhenCompleted;
 
 #pragma mark -StatusBar menu action
 - (void)onInputMethodSelected {
-    [self onImputMethodChanged:YES];
+    [self onInputMethodChanged:YES];
 }
 
 - (void)onInputTypeSelected:(id)sender {
@@ -454,7 +475,6 @@ extern bool convertToolDontAlertWhenCompleted;
     if (_convertWC == nil) {
         _convertWC = [[NSStoryboard storyboardWithName:@"Main" bundle:nil] instantiateControllerWithIdentifier:@"ConvertWindow"];
     }
-    //[OpenKeyManager showDockIcon:YES];
     if ([_convertWC.window isVisible])
         return;
     [_convertWC.window makeKeyAndOrderFront:nil];
@@ -475,7 +495,6 @@ extern bool convertToolDontAlertWhenCompleted;
     if (_mainWC == nil) {
         _mainWC = [[NSStoryboard storyboardWithName:@"Main" bundle:nil] instantiateControllerWithIdentifier:@"OpenKey"];
     }
-    //[OpenKeyManager showDockIcon:YES];
     if ([_mainWC.window isVisible]) {
         return;
     }
@@ -487,7 +506,6 @@ extern bool convertToolDontAlertWhenCompleted;
     if (_macroWC == nil) {
         _macroWC = [[NSStoryboard storyboardWithName:@"Main" bundle:nil] instantiateControllerWithIdentifier:@"MacroWindow"];
     }
-    //[OpenKeyManager showDockIcon:YES];
     if ([_macroWC.window isVisible])
         return;
     
@@ -499,7 +517,6 @@ extern bool convertToolDontAlertWhenCompleted;
     if (_aboutWC == nil) {
         _aboutWC = [[NSStoryboard storyboardWithName:@"Main" bundle:nil] instantiateControllerWithIdentifier:@"AboutWindow"];
     }
-    //[OpenKeyManager showDockIcon:YES];
     if ([_aboutWC.window isVisible])
         return;
 

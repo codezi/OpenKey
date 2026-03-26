@@ -7,6 +7,7 @@
 //
 
 #import "MacroViewController.h"
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #include "Engine.h"
 
 #define MACRO_ADD_TEXT @"Thêm"
@@ -19,7 +20,7 @@
 @implementation MacroViewController{
     vector<vector<Uint32>> keys;
     vector<string> macroText;
-    vector<string> macroContent;
+    vector<string> macroContentData;
 }
 
 - (void)viewDidLoad {
@@ -33,11 +34,11 @@
     self.AutoCapsMacro.state = vAutoCapsMacro ? NSControlStateValueOn : NSControlStateValueOff;
     
     //load data
-    getAllMacro(keys, macroText, macroContent);
+    getAllMacro(keys, macroText, macroContentData);
 }
 
 -(void)saveAndReload {
-    getAllMacro(keys, macroText, macroContent);
+    getAllMacro(keys, macroText, macroContentData);
     [self.tableView reloadData];
     
     vector<Byte> macroData;
@@ -84,7 +85,7 @@
     [openPanel setCanChooseFiles:YES];
     [openPanel setAllowsMultipleSelection:NO];
     [openPanel setCanChooseDirectories:NO];
-    [openPanel setAllowedFileTypes:[NSArray arrayWithObjects:@"txt", nil]];
+    [openPanel setAllowedContentTypes:@[UTTypePlainText]];
     [openPanel setExtensionHidden:NO];
     [openPanel setNameFieldStringValue:@"OpenKeyMacro"];
     [openPanel makeKeyAndOrderFront:nil];
@@ -95,7 +96,7 @@
         [alert addButtonWithTitle:@"Có"];
         [alert addButtonWithTitle:@"Không"];
         [alert setMessageText:@"Dữ liệu gõ tắt"];
-        [alert setAlertStyle:NSCriticalAlertStyle];
+        [alert setAlertStyle:NSAlertStyleCritical];
         [alert beginSheetModalForWindow:self.view.window completionHandler:^(NSModalResponse returnCode) {
             readFromFile(openPanel.URL.path.UTF8String, returnCode == 1000);
             [self saveAndReload];
@@ -108,7 +109,7 @@
     savePanel.canCreateDirectories = YES;
     [savePanel setMessage:@"Chọn nơi lưu dữ liệu gõ tắt"];
     [savePanel setTitle:@"Chọn nơi lưu dữ liệu gõ tắt"];
-    [savePanel setAllowedFileTypes:[NSArray arrayWithObjects:@"txt", nil]];
+    [savePanel setAllowedContentTypes:@[UTTypePlainText]];
     [savePanel setExtensionHidden:NO];
     [savePanel setNameFieldStringValue:@"OpenKeyMacro"];
     if ([savePanel runModal] == NSModalResponseOK) {
@@ -121,7 +122,7 @@
     [alert setInformativeText:msg];
     [alert addButtonWithTitle:@"OK"];
     [alert setMessageText:@"Gõ tắt"];
-    [alert setAlertStyle:NSCriticalAlertStyle];
+    [alert setAlertStyle:NSAlertStyleCritical];
     [alert beginSheetModalForWindow:self.view.window completionHandler:^(NSModalResponse returnCode) {
         
     }];
@@ -160,14 +161,14 @@
     } else if (tableColumn == tableView.tableColumns[1]) {
         cellId = @"ContentCell";
         v = [tableView makeViewWithIdentifier:cellId owner:self];
-        [v.textField setStringValue:[NSString stringWithUTF8String:macroContent[row].c_str()]];
+        [v.textField setStringValue:[NSString stringWithUTF8String:macroContentData[row].c_str()]];
     }
     return v;
 }
 
 - (BOOL)tableView:(NSTableView *)tableView shouldSelectRow:(NSInteger)row {
     [self.macroName setStringValue:[NSString stringWithUTF8String:macroText[row].c_str()]];
-    [self.macroContent setStringValue:[NSString stringWithUTF8String:macroContent[row].c_str()]];
+    [self.macroContent setStringValue:[NSString stringWithUTF8String:macroContentData[row].c_str()]];
     [self.buttonAdd setTitle:MACRO_EDIT_TEXT];
     return YES;
 }

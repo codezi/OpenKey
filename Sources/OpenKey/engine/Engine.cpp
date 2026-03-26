@@ -123,13 +123,54 @@ static bool _willTempOffEngine = false;
 void findAndCalculateVowel(const bool& forGrammar=false);
 void insertMark(const Uint32& markMask, const bool& canModifyFlag=true);
 
-static std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
 wstring utf8ToWideString(const string& str) {
-    return converter.from_bytes(str.c_str());
+    wstring result;
+    const unsigned char* s = (const unsigned char*)str.c_str();
+    size_t len = str.size();
+    size_t pos = 0;
+    while (pos < len) {
+        uint32_t cp;
+        if ((s[pos] & 0x80) == 0) {
+            cp = s[pos++];
+        } else if ((s[pos] & 0xE0) == 0xC0 && pos + 1 < len) {
+            cp = (s[pos] & 0x1F) << 6 | (s[pos+1] & 0x3F);
+            pos += 2;
+        } else if ((s[pos] & 0xF0) == 0xE0 && pos + 2 < len) {
+            cp = (s[pos] & 0x0F) << 12 | (s[pos+1] & 0x3F) << 6 | (s[pos+2] & 0x3F);
+            pos += 3;
+        } else if ((s[pos] & 0xF8) == 0xF0 && pos + 3 < len) {
+            cp = (s[pos] & 0x07) << 18 | (s[pos+1] & 0x3F) << 12 | (s[pos+2] & 0x3F) << 6 | (s[pos+3] & 0x3F);
+            pos += 4;
+        } else {
+            pos++; // skip invalid byte
+            continue;
+        }
+        result.push_back((wchar_t)cp);
+    }
+    return result;
 }
 
 string wideStringToUtf8(const wstring& str) {
-    return converter.to_bytes(str.c_str());
+    string result;
+    for (size_t i = 0; i < str.size(); i++) {
+        uint32_t cp = (uint32_t)str[i];
+        if (cp < 0x80) {
+            result.push_back((char)cp);
+        } else if (cp < 0x800) {
+            result.push_back((char)(0xC0 | (cp >> 6)));
+            result.push_back((char)(0x80 | (cp & 0x3F)));
+        } else if (cp < 0x10000) {
+            result.push_back((char)(0xE0 | (cp >> 12)));
+            result.push_back((char)(0x80 | ((cp >> 6) & 0x3F)));
+            result.push_back((char)(0x80 | (cp & 0x3F)));
+        } else {
+            result.push_back((char)(0xF0 | (cp >> 18)));
+            result.push_back((char)(0x80 | ((cp >> 12) & 0x3F)));
+            result.push_back((char)(0x80 | ((cp >> 6) & 0x3F)));
+            result.push_back((char)(0x80 | (cp & 0x3F)));
+        }
+    }
+    return result;
 }
 
 void* vKeyInit() {
@@ -283,8 +324,7 @@ void checkSpelling(const bool& forceCheckVowel=false) {
     }
     tempDisableKey = !(_spellingOK && _spellingVowelOK);
     
-    //cout<<"spelling vowel: "<<(_spellingVowelOK ? "OK": "Err")<<endl;
-    //cout<<"spelling: "<<(_spellingOK ? "OK": "Err")<<endl<<endl;
+
 }
 
 void checkGrammar(const int& deltaBackSpace) {
@@ -553,8 +593,6 @@ Uint32 getCharacterCode(const Uint32& data) {
             return data; //not found
         }
     }
-    
-    return 0;
 }
 
 void findAndCalculateVowel(const bool& forGrammar) {
@@ -669,9 +707,9 @@ void handleModernMark() {
                 CHR(VSI+2) == KEY_M || CHR(VSI+2) == KEY_N ||
                 CHR(VSI+2) == KEY_O || CHR(VSI+2) == KEY_U ||
                 CHR(VSI+2) == KEY_I || CHR(VSI+2) == KEY_C ||
-                (VSI+3 < _index && CHR(VSI+2) == KEY_C && CHR(VSI+2) == KEY_H) ||
-                (VSI+3 < _index && CHR(VSI+2) == KEY_N && CHR(VSI+2) == KEY_H) ||
-                (VSI+3 < _index && CHR(VSI+2) == KEY_N && CHR(VSI+2) == KEY_G)) {
+                (VSI+3 < _index && CHR(VSI+2) == KEY_C && CHR(VSI+3) == KEY_H) ||
+                (VSI+3 < _index && CHR(VSI+2) == KEY_N && CHR(VSI+3) == KEY_H) ||
+                (VSI+3 < _index && CHR(VSI+2) == KEY_N && CHR(VSI+3) == KEY_G)) {
                 
                 VWSM = VSI + 1;
                 hBPC = _index - VWSM;
@@ -685,9 +723,9 @@ void handleModernMark() {
         }
     }
     //rule 3.2
-    else if ((CHR(VSI) == KEY_I && (CHR(VSI) == KEY_A)) ||
-             (CHR(VSI) == KEY_Y && (CHR(VSI) == KEY_A)) ||
-             (CHR(VSI) == KEY_U && (CHR(VSI) == KEY_A)) ||
+    else if ((CHR(VSI) == KEY_I && (CHR(VSI+1) == KEY_A)) ||
+             (CHR(VSI) == KEY_Y && (CHR(VSI+1) == KEY_A)) ||
+             (CHR(VSI) == KEY_U && (CHR(VSI+1) == KEY_A)) ||
              (CHR(VSI) == KEY_U && (TypingWord[VSI+1] == (KEY_U | TONEW_MASK)))){
         
         VWSM = VSI;
@@ -1551,8 +1589,5 @@ void vKeyHandleEvent(const vKeyEvent& event,
         }
     }
     
-    //Debug
-    //cout<<"index "<<(int)_index<< ", stateIndex "<<(int)_stateIndex<<", word "<<_typingStates.size()<<", long word "<<_longWordHelper.size()<< endl;
-    //cout<<"backspace "<<(int)hBPC<<endl;
-    //cout<<"new char "<<(int)hNCC<<endl<<endl;
+
 }

@@ -79,21 +79,27 @@ static void convert(const string& str, vector<Uint32>& outData) {
  */
 void initMacroMap(const Byte* pData, const int& size) {
     macroMap.clear();
+    if (pData == NULL || size < 2) return;
+    
     Uint16 macroCount = 0;
     Uint32 cursor = 0;
-    if (size >= 2) {
-        memcpy(&macroCount, pData + cursor, 2);
-        cursor+=2;
-    }
+    memcpy(&macroCount, pData + cursor, 2);
+    cursor += 2;
+    
     Uint8 macroTextSize;
     Uint16 macroContentSize;
     for (int i = 0; i < macroCount; i++) {
+        if (cursor >= (Uint32)size) break;
+        
         macroTextSize = pData[cursor++];
+        if (cursor + macroTextSize > (Uint32)size) break;
         string macroText((char*)pData + cursor, macroTextSize);
         cursor += macroTextSize;
         
+        if (cursor + 2 > (Uint32)size) break;
         memcpy(&macroContentSize, pData + cursor, 2);
-        cursor+=2;
+        cursor += 2;
+        if (cursor + macroContentSize > (Uint32)size) break;
         string macroContent((char*)pData + cursor, macroContentSize);
         cursor += macroContentSize;
         
@@ -145,7 +151,7 @@ static bool modifyCaseUnicode(Uint32& code, const bool& isUpperCase=true) {
                 else if (_kMacro % 2 != 0 && isUpperCase)
                     _kMacro--;
                 code = _codeTable[vCodeTable][it->first][_kMacro] | CHAR_CODE_MASK;
-                return code != _charBuff;;
+                return code != _charBuff;
             }//end if
         }
     }
@@ -271,13 +277,13 @@ void readFromFile(const string& path, const bool& append) {
             pos = line.find(":");
             if (string::npos != pos) {
                 name = line.substr(0, pos);
-                content = line.substr(pos + 1, line.length() - pos - 1);
+                content = line.substr(pos + 1);
 				while (name.compare("") == 0 && content.compare("") != 0) {
 					pos = content.find(":");
 					if (string::npos != pos) {
 						name += ":";
 						name += content.substr(0, pos);
-						content = content.substr(pos + 1, line.length() - pos - 1);
+						content = content.substr(pos + 1);
 					} else {
 						break;
 					}

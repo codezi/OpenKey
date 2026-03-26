@@ -11,6 +11,7 @@
 #import "Engine.h"
 #import "AppDelegate.h"
 #import "ViewController.h"
+#import "OpenKeyManager.h"
 
 #define FRONT_APP [[NSWorkspace sharedWorkspace] frontmostApplication].bundleIdentifier
 #define OTHER_CONTROL_KEY (_flag & kCGEventFlagMaskCommand) || (_flag & kCGEventFlagMaskControl) || \
@@ -85,6 +86,12 @@ extern "C" {
     
     NSString* _frontMostApp = @"UnknownApp";
     
+    void OpenKeyCleanup() {
+        if (eventBackSpaceDown) { CFRelease(eventBackSpaceDown); eventBackSpaceDown = NULL; }
+        if (eventBackSpaceUp) { CFRelease(eventBackSpaceUp); eventBackSpaceUp = NULL; }
+        if (myEventSource) { CFRelease(myEventSource); myEventSource = NULL; }
+    }
+    
     void OpenKeyInit() {
         //load saved data
         vFreeMark = 0;//(int)[[NSUserDefaults standardUserDefaults] integerForKey:@"FreeMark"];
@@ -129,6 +136,7 @@ extern "C" {
         initSmartSwitchKey((Byte*)data.bytes, (int)data.length);
         
         //init convert tool
+        // UserDefaults key stores "should alert" (1=alert), variable stores "don't alert" (inverted)
         convertToolDontAlertWhenCompleted = ![prefs boolForKey:@"convertToolDontAlertWhenCompleted"];
         convertToolToAllCaps = [prefs boolForKey:@"convertToolToAllCaps"];
         convertToolToAllNonCaps = [prefs boolForKey:@"convertToolToAllNonCaps"];
@@ -187,7 +195,7 @@ extern "C" {
         if ((_languageTemp & 0x01) != vLanguage) { //for input method
             if (_languageTemp != -1) {
                 vLanguage = _languageTemp;
-                [appDelegate onImputMethodChanged:NO];
+                [appDelegate onInputMethodChanged:NO];
                 startNewSession();
             } else {
                 saveSmartSwitchKeyData();
@@ -347,7 +355,7 @@ extern "C" {
         CGEventTapPostEvent(_proxy, eventBackSpaceDown);
         CGEventTapPostEvent(_proxy, eventBackSpaceUp);
         
-        if (IS_DOUBLE_CODE(vCodeTable)) { //VNI or Unicode Compound
+        if (IS_DOUBLE_CODE(vCodeTable) && !_syncKey.empty()) { //VNI or Unicode Compound
             if (_syncKey.back() > 1) {
                 if (!(vCodeTable == 3 && containUnicodeCompoundApp(FRONT_APP))) {
                     CGEventTapPostEvent(_proxy, eventBackSpaceDown);
@@ -369,7 +377,7 @@ extern "C" {
         CGEventTapPostEvent(_proxy, eventVkeyDown);
         CGEventTapPostEvent(_proxy, eventVkeyUp);
         
-        if (IS_DOUBLE_CODE(vCodeTable)) { //VNI or Unicode Compound
+        if (IS_DOUBLE_CODE(vCodeTable) && !_syncKey.empty()) { //VNI or Unicode Compound
             if (_syncKey.back() > 1) {
                 if (!(vCodeTable == 3 && containUnicodeCompoundApp(FRONT_APP))) {
                     CGEventTapPostEvent(_proxy, eventVkeyDown);
@@ -408,7 +416,8 @@ extern "C" {
                  dataFromMacro ? _k < pData->macroData.size() : _k >= 0;
                  dataFromMacro ? _k++ : _k--) {
                 
-                if (_j >= 16) {
+                // Leave room for multi-byte codes (up to 2 chars per iteration)
+                if (_j >= MAX_UNICODE_STRING - 2) {
                     _willContinuteSending = true;
                     break;
                 }
@@ -458,7 +467,7 @@ extern "C" {
             }//end for
         }
         
-        if (!_willContinuteSending && (pData->code == vRestore || pData->code == vRestoreAndStartNewSession)) { //if is restore
+        if (!_willContinuteSending && _j < MAX_UNICODE_STRING && (pData->code == vRestore || pData->code == vRestoreAndStartNewSession)) { //if is restore
             if (keyCodeToCharacter(_keycode) != 0) {
                 _newCharSize++;
                 _newCharString[_j++] = keyCodeToCharacter(_keycode | ((_flag & kCGEventFlagMaskAlphaShift) || (_flag & kCGEventFlagMaskShift) ? CAPS_MASK : 0));
@@ -472,8 +481,8 @@ extern "C" {
         
         _newEventDown = CGEventCreateKeyboardEvent(myEventSource, 0, true);
         _newEventUp = CGEventCreateKeyboardEvent(myEventSource, 0, false);
-        CGEventKeyboardSetUnicodeString(_newEventDown, _willContinuteSending ? 16 : _newCharSize - offset, _newCharString);
-        CGEventKeyboardSetUnicodeString(_newEventUp, _willContinuteSending ? 16 : _newCharSize - offset, _newCharString);
+        CGEventKeyboardSetUnicodeString(_newEventDown, _j, _newCharString);
+        CGEventKeyboardSetUnicodeString(_newEventUp, _j, _newCharString);
         CGEventTapPostEvent(_proxy, _newEventDown);
         CGEventTapPostEvent(_proxy, _newEventUp);
         CFRelease(_newEventDown);
@@ -514,7 +523,7 @@ extern "C" {
             vLanguage = 0;
         if (HAS_BEEP(vSwitchKeyStatus))
             NSBeep();
-        [appDelegate onImputMethodChanged:YES];
+        [appDelegate onInputMethodChanged:YES];
         startNewSession();
     }
     
@@ -576,6 +585,12 @@ extern "C" {
      * MAIN Callback.
      */
     CGEventRef OpenKeyCallback(CGEventTapProxy proxy, CGEventType type, CGEventRef event, void *refcon) {
+        // Re-enable event tap if system disabled it due to timeout
+        if (type == kCGEventTapDisabledByTimeout || type == kCGEventTapDisabledByUserInput) {
+            [OpenKeyManager reEnableEventTap];
+            return event;
+        }
+        
         //dont handle my event
         if (CGEventGetIntegerValueField(event, kCGEventSourceStateID) == CGEventSourceGetSourceStateID(myEventSource)) {
             return event;
@@ -674,15 +689,16 @@ extern "C" {
             {
                 CFArrayRef languages = (CFArrayRef) TISGetInputSourceProperty(isource, kTISPropertyInputSourceLanguages);
                 
-                if (CFArrayGetCount(languages) > 0) {
+                if (languages != NULL && CFArrayGetCount(languages) > 0) {
                     CFStringRef langRef = (CFStringRef)CFArrayGetValueAtIndex(languages, 0);
                     NSString *currentLanguage = (__bridge NSString *)langRef;
+                    // langRef follows the Get Rule - do NOT release it
                     if(![currentLanguage isLike:@"en"]){
+                        CFRelease(isource);
                         return event;
                     }
-                    CFRelease(langRef);
-                    CFRelease(isource);
                 }
+                CFRelease(isource);
             }
         }
         

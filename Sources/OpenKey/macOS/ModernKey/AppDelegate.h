@@ -13,7 +13,7 @@
 
 @interface AppDelegate : NSObject <NSApplicationDelegate>
 
--(void)onImputMethodChanged:(BOOL)willNotify;
+-(void)onInputMethodChanged:(BOOL)willNotify;
 -(void)onInputMethodSelected;
 
 -(void)askPermission;

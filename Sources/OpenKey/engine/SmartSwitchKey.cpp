@@ -18,19 +18,24 @@ static Int8 _cacheData = 0; //use cache for faster
 
 void initSmartSwitchKey(const Byte* pData, const int& size) {
     _smartSwitchKeyData.clear();
-    if (pData == NULL) return;
+    if (pData == NULL || size < 2) return;
+    
     Uint16 count = 0;
     Uint32 cursor = 0;
-    if (size >= 2) {
-        memcpy(&count, pData + cursor, 2);
-        cursor+=2;
-    }
+    memcpy(&count, pData + cursor, 2);
+    cursor += 2;
+    
     Uint8 bundleIdSize;
     Uint8 value;
     for (int i = 0; i < count; i++) {
+        if (cursor >= (Uint32)size) break;
+        
         bundleIdSize = pData[cursor++];
+        if (cursor + bundleIdSize >= (Uint32)size) break;
         string bundleId((char*)pData + cursor, bundleIdSize);
         cursor += bundleIdSize;
+        
+        if (cursor >= (Uint32)size) break;
         value = pData[cursor++];
         _smartSwitchKeyData[bundleId] = value;
     }
