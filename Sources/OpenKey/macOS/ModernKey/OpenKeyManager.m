@@ -75,8 +75,10 @@ static CFRunLoopSourceRef runLoopSource;
     // Enable the event tap.
     CGEventTapEnable(eventTap, true);
     
-    // Set it all running.
-    CFRunLoopRun();
+    // Note: No CFRunLoopRun() here - the main run loop is already running
+    // via NSApplicationMain(). Adding CFRunLoopRun() would create a nested
+    // run loop that blocks the main dispatch queue, preventing NSStatusItem
+    // menu presentation on macOS 14+.
     
     return YES;
 }
@@ -95,8 +97,6 @@ static CFRunLoopSourceRef runLoopSource;
         
         OpenKeyCleanup();
         _isInited = false;
-        
-        CFRunLoopStop(CFRunLoopGetCurrent());
     }
     return YES;
 }

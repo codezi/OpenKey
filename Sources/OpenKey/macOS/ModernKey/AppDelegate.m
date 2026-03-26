@@ -113,6 +113,15 @@ extern bool convertToolDontAlertWhenCompleted;
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
     appDelegate = self;
     
+    // Create minimal main menu programmatically (LSUIElement app)
+    NSMenu *mainMenu = [[NSMenu alloc] init];
+    NSMenuItem *appMenuItem = [[NSMenuItem alloc] init];
+    [mainMenu addItem:appMenuItem];
+    NSMenu *appMenu = [[NSMenu alloc] init];
+    [appMenu addItemWithTitle:@"Quit OpenKey" action:@selector(terminate:) keyEquivalent:@"q"];
+    [appMenuItem setSubmenu:appMenu];
+    [NSApp setMainMenu:mainMenu];
+    
     [self registerSupportedNotification];
     
     //set quick tooltip
@@ -132,10 +141,30 @@ extern bool convertToolDontAlertWhenCompleted;
         return;
     }
     
-    // check if user granted Accessabilty permission
+    // check if user granted Accessibility permission
     if (!MJAccessibilityIsEnabled()) {
-        [self askPermission];
-        return;
+        // Prompt the system Accessibility dialog
+        MJAccessibilityOpenPanel();
+        
+        NSAlert *alert = [[NSAlert alloc] init];
+        [alert setMessageText:@"OpenKey cần quyền Accessibility để hoạt động!"];
+        [alert setInformativeText:@"Vui lòng bật quyền cho OpenKey trong System Settings > Privacy & Security > Accessibility, rồi bấm OK."];
+        [alert addButtonWithTitle:@"OK"];
+        [alert addButtonWithTitle:@"Thoát"];
+        [alert.window makeKeyAndOrderFront:nil];
+        [alert.window setLevel:NSStatusWindowLevel];
+        
+        NSModalResponse res = [alert runModal];
+        if (res == NSAlertSecondButtonReturn) {
+            [NSApp terminate:nil];
+            return;
+        }
+        
+        // Re-check after user claims they granted permission
+        if (!MJAccessibilityIsEnabled()) {
+            [self askPermission];
+            return;
+        }
     }
     
     vShowIconOnDock = (int)[[NSUserDefaults standardUserDefaults] integerForKey:@"vShowIconOnDock"];
@@ -166,11 +195,6 @@ extern bool convertToolDontAlertWhenCompleted;
     }
     [[NSUserDefaults standardUserDefaults] setInteger:1 forKey:@"NonFirstTime"];
     
-    //check update if enable
-    NSInteger dontCheckUpdate = [[NSUserDefaults standardUserDefaults] integerForKey:@"DontCheckUpdate"];
-    if (!dontCheckUpdate)
-        [OpenKeyManager checkNewVersion:nil callbackFunc:nil];
-    
     //correct run on startup
     NSInteger val = [[NSUserDefaults standardUserDefaults] integerForKey:@"RunOnStartup"];
     [appDelegate setRunOnStartup:val];
@@ -189,8 +213,9 @@ extern bool convertToolDontAlertWhenCompleted;
 -(void) createStatusBarMenu {
     NSStatusBar *statusBar = [NSStatusBar systemStatusBar];
     statusItem = [statusBar statusItemWithLength:NSVariableStatusItemLength];
-    statusItem.button.image = [NSImage imageNamed:@"Status"];
-    statusItem.button.alternateImage = [NSImage imageNamed:@"StatusHighlighted"];
+    NSImage *img = [NSImage imageNamed:@"Status"];
+    [img setTemplate:YES];
+    statusItem.button.image = img;
     
     theMenu = [[NSMenu alloc] initWithTitle:@""];
     [theMenu setAutoenablesItems:NO];
@@ -198,6 +223,7 @@ extern bool convertToolDontAlertWhenCompleted;
     menuInputMethod = [theMenu addItemWithTitle:@"Bật Tiếng Việt"
                                                      action:@selector(onInputMethodSelected)
                                               keyEquivalent:@""];
+    menuInputMethod.target = self;
     [theMenu addItem:[NSMenuItem separatorItem]];
     NSMenuItem* menuInputType = [theMenu addItemWithTitle:@"Kiểu gõ" action:nil keyEquivalent:@""];
     
@@ -205,22 +231,30 @@ extern bool convertToolDontAlertWhenCompleted;
     
     mnuUnicode = [theMenu addItemWithTitle:@"Unicode dựng sẵn" action:@selector(onCodeSelected:) keyEquivalent:@""];
     mnuUnicode.tag = 0;
+    mnuUnicode.target = self;
     mnuTCVN = [theMenu addItemWithTitle:@"TCVN3 (ABC)" action:@selector(onCodeSelected:) keyEquivalent:@""];
     mnuTCVN.tag = 1;
+    mnuTCVN.target = self;
     mnuVNIWindows = [theMenu addItemWithTitle:@"VNI Windows" action:@selector(onCodeSelected:) keyEquivalent:@""];
     mnuVNIWindows.tag = 2;
+    mnuVNIWindows.target = self;
     NSMenuItem* menuCode = [theMenu addItemWithTitle:@"Bảng mã khác" action:nil keyEquivalent:@""];
     
     [theMenu addItem:[NSMenuItem separatorItem]];
     
-    [theMenu addItemWithTitle:@"Công cụ chuyển mã..." action:@selector(onConvertTool) keyEquivalent:@""];
+    NSMenuItem* mnuConvertTool = [theMenu addItemWithTitle:@"Công cụ chuyển mã..." action:@selector(onConvertTool) keyEquivalent:@""];
+    mnuConvertTool.target = self;
     mnuQuickConvert = [theMenu addItemWithTitle:@"Chuyển mã nhanh" action:@selector(onQuickConvert) keyEquivalent:@""];
+    mnuQuickConvert.target = self;
     
     [theMenu addItem:[NSMenuItem separatorItem]];
     
-    [theMenu addItemWithTitle:@"Bảng điều khiển..." action:@selector(onControlPanelSelected) keyEquivalent:@""];
-    [theMenu addItemWithTitle:@"Gõ tắt..." action:@selector(onMacroSelected) keyEquivalent:@""];
-    [theMenu addItemWithTitle:@"Giới thiệu" action:@selector(onAboutSelected) keyEquivalent:@""];
+    NSMenuItem* mnuControlPanel = [theMenu addItemWithTitle:@"Bảng điều khiển..." action:@selector(onControlPanelSelected) keyEquivalent:@""];
+    mnuControlPanel.target = self;
+    NSMenuItem* mnuMacro = [theMenu addItemWithTitle:@"Gõ tắt..." action:@selector(onMacroSelected) keyEquivalent:@""];
+    mnuMacro.target = self;
+    NSMenuItem* mnuAbout = [theMenu addItemWithTitle:@"Giới thiệu" action:@selector(onAboutSelected) keyEquivalent:@""];
+    mnuAbout.target = self;
     [theMenu addItem:[NSMenuItem separatorItem]];
     
     [theMenu addItemWithTitle:@"Thoát" action:@selector(terminate:) keyEquivalent:@"q"];
@@ -230,7 +264,7 @@ extern bool convertToolDontAlertWhenCompleted;
     [self setCodeMenu:menuCode];
     
     //set menu
-    [statusItem setMenu:theMenu];
+    statusItem.menu = theMenu;
     
     [self fillData];
 }
@@ -308,20 +342,15 @@ extern bool convertToolDontAlertWhenCompleted;
 }
 
 -(void)setRunOnStartup:(BOOL)val {
-    if (@available(macOS 13.0, *)) {
-        SMAppService *service = [SMAppService loginItemServiceWithIdentifier:@"com.tuyenmai.OpenKeyHelper"];
-        NSError *error = nil;
-        if (val) {
-            [service registerAndReturnError:&error];
-        } else {
-            [service unregisterAndReturnError:&error];
-        }
-        if (error) {
-            NSLog(@"SMAppService error: %@", error);
-        }
+    SMAppService *service = [SMAppService loginItemServiceWithIdentifier:@"com.tuyenmai.OpenKeyHelper"];
+    NSError *error = nil;
+    if (val) {
+        [service registerAndReturnError:&error];
     } else {
-        CFStringRef appId = (__bridge CFStringRef)@"com.tuyenmai.OpenKeyHelper";
-        SMLoginItemSetEnabled(appId, val);
+        [service unregisterAndReturnError:&error];
+    }
+    if (error) {
+        NSLog(@"SMAppService error: %@", error);
     }
 }
 
@@ -341,12 +370,16 @@ extern bool convertToolDontAlertWhenCompleted;
     [sub setAutoenablesItems:NO];
     mnuTelex = [sub addItemWithTitle:@"Telex" action:@selector(onInputTypeSelected:) keyEquivalent:@""];
     mnuTelex.tag = 0;
+    mnuTelex.target = self;
     mnuVNI = [sub addItemWithTitle:@"VNI" action:@selector(onInputTypeSelected:) keyEquivalent:@""];
     mnuVNI.tag = 1;
+    mnuVNI.target = self;
     mnuSimpleTelex1 = [sub addItemWithTitle:@"Simple Telex 1" action:@selector(onInputTypeSelected:) keyEquivalent:@""];
     mnuSimpleTelex1.tag = 2;
+    mnuSimpleTelex1.target = self;
     mnuSimpleTelex2 = [sub addItemWithTitle:@"Simple Telex 2" action:@selector(onInputTypeSelected:) keyEquivalent:@""];
     mnuSimpleTelex2.tag = 3;
+    mnuSimpleTelex2.target = self;
     [theMenu setSubmenu:sub forItem:parent];
 }
 
@@ -356,8 +389,10 @@ extern bool convertToolDontAlertWhenCompleted;
     [sub setAutoenablesItems:NO];
     mnuUnicodeComposite = [sub addItemWithTitle:@"Unicode tổ hợp" action:@selector(onCodeSelected:) keyEquivalent:@""];
     mnuUnicodeComposite.tag = 3;
+    mnuUnicodeComposite.target = self;
     mnuVietnameseLocaleCP1258 = [sub addItemWithTitle:@"Vietnamese Locale CP 1258" action:@selector(onCodeSelected:) keyEquivalent:@""];
     mnuVietnameseLocaleCP1258.tag = 4;
+    mnuVietnameseLocaleCP1258.target = self;
     
     [theMenu setSubmenu:sub forItem:parent];
 }
@@ -368,14 +403,14 @@ extern bool convertToolDontAlertWhenCompleted;
     NSInteger grayIcon = [[NSUserDefaults standardUserDefaults] integerForKey:@"GrayIcon"];
     if (intInputMethod == 1) {
         [menuInputMethod setState:NSControlStateValueOn];
-        statusItem.button.image = [NSImage imageNamed:@"Status"];
-        [statusItem.button.image setTemplate:(grayIcon ? YES : NO)];
-        statusItem.button.alternateImage = [NSImage imageNamed:@"StatusHighlighted"];
+        NSImage *img = [NSImage imageNamed:@"Status"];
+        [img setTemplate:(grayIcon ? YES : NO)];
+        statusItem.button.image = img;
     } else {
         [menuInputMethod setState:NSControlStateValueOff];
-        statusItem.button.image = [NSImage imageNamed:@"StatusEng"];
-        [statusItem.button.image setTemplate:(grayIcon ? YES : NO)];
-        statusItem.button.alternateImage = [NSImage imageNamed:@"StatusHighlightedEng"];
+        NSImage *img = [NSImage imageNamed:@"StatusEng"];
+        [img setTemplate:(grayIcon ? YES : NO)];
+        statusItem.button.image = img;
     }
     vLanguage = (int)intInputMethod;
     

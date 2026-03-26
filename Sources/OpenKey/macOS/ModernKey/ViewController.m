@@ -46,8 +46,9 @@ extern int vPerformLayoutCompat;
     __weak IBOutlet NSButton *CustomSwitchShift;
     __weak IBOutlet MyTextField *CustomSwitchKey;
     __weak IBOutlet NSButton *CustomBeepSound;
-    NSArray* tabviews, *tabbuttons;
+    NSArray* tabviews;
     NSRect tabViewRect;
+    NSSegmentedControl *tabSegmentedControl;
 }
 
 - (void)viewDidLoad {
@@ -65,11 +66,28 @@ extern int vPerformLayoutCompat;
     
     //set correct tabgroup
     tabviews = [NSArray arrayWithObjects:self.tabviewPrimary, self.tabviewMacro, self.tabviewSystem, self.tabviewInfo, nil];
-    tabbuttons = [NSArray arrayWithObjects:self.tabbuttonPrimary, self.tabbuttonMacro, self.tabbuttonSystem, self.tabbuttonInfo, nil];
     tabViewRect = self.tabviewPrimary.frame;
     for (NSBox* b in tabviews) {
         b.frame = tabViewRect;
     }
+    
+    // Hide old tab buttons and replace with segmented control
+    self.tabbuttonPrimary.hidden = YES;
+    self.tabbuttonMacro.hidden = YES;
+    self.tabbuttonSystem.hidden = YES;
+    self.tabbuttonInfo.hidden = YES;
+    
+    // Use tabbuttonSystem's frame as reference (it's a direct child of the main view)
+    NSRect sysFrame = self.tabbuttonSystem.frame;
+    NSRect segFrame = NSMakeRect(20, sysFrame.origin.y, 520, sysFrame.size.height);
+    tabSegmentedControl = [NSSegmentedControl segmentedControlWithLabels:@[@"Bộ gõ", @"Gõ tắt", @"Hệ thống", @"Thông tin"]
+                                                            trackingMode:NSSegmentSwitchTrackingSelectOne
+                                                                  target:self
+                                                                  action:@selector(onTabChanged:)];
+    tabSegmentedControl.frame = segFrame;
+    tabSegmentedControl.segmentStyle = NSSegmentStyleAutomatic;
+    tabSegmentedControl.selectedSegment = 0;
+    [self.view addSubview:tabSegmentedControl];
     
     [self showTab:0];
     
@@ -128,19 +146,20 @@ extern int vPerformLayoutCompat;
         [b setHidden:YES];
         b.frame = tempRect;
     }
-    for (NSButton* b in tabbuttons) {
-        [b setState:NSControlStateValueOff];
-    }
     NSBox* b = [tabviews objectAtIndex:index];
     [b setHidden:NO];
     b.frame = tabViewRect;
     
-    NSButton* button = [tabbuttons objectAtIndex:index];
-    [button setState:NSControlStateValueOn];
+    tabSegmentedControl.selectedSegment = index;
 }
 
 - (IBAction)onTabButton:(NSButton *)sender {
+    // Legacy storyboard action - still connected but buttons are hidden
     [self showTab:sender.tag];
+}
+
+- (void)onTabChanged:(NSSegmentedControl *)sender {
+    [self showTab:sender.selectedSegment];
 }
 
 - (IBAction)onInputTypeChanged:(NSPopUpButton *)sender {
@@ -506,7 +525,7 @@ extern int vPerformLayoutCompat;
 }
 
 - (IBAction)onSourceCode:(id)sender {
-  [[NSWorkspace sharedWorkspace] openURL: [NSURL URLWithString:@"https://github.com/tuyenvm/OpenKey"]];
+  [[NSWorkspace sharedWorkspace] openURL: [NSURL URLWithString:@"https://github.com/codezi/OpenKey"]];
 }
 
 - (IBAction)onCheckNewVersionButton:(id)sender {
