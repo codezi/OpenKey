@@ -349,7 +349,7 @@ extern bool convertToolDontAlertWhenCompleted;
 }
 
 -(void)setRunOnStartup:(BOOL)val {
-    SMAppService *service = [SMAppService loginItemServiceWithIdentifier:@"com.tuyenmai.OpenKeyHelper"];
+    SMAppService *service = [SMAppService mainAppService];
     NSError *error = nil;
     if (val) {
         [service registerAndReturnError:&error];
