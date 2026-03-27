@@ -138,7 +138,10 @@ void getMacroSaveData(vector<Byte>& outData) {
 static bool modifyCaseUnicode(Uint32& code, const bool& isUpperCase=true) {
     _charBuff = code;
     if (!(code & CHAR_CODE_MASK)) { //for normal char
-        code &= isUpperCase ? CAPS_MASK :  ~CAPS_MASK;
+        if (isUpperCase)
+            code |= CAPS_MASK;
+        else
+            code &= ~CAPS_MASK;
         return code != _charBuff;
     }
     
